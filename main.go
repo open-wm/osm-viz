@@ -19,6 +19,8 @@ type WayWithNodes struct {
 	Nodes []*osm.Node
 }
 
+// TODO: do an isochrone?
+
 func main() {
 	start := time.Now()
 	file, err := os.Open("map-sani.osm")
@@ -95,9 +97,9 @@ func main() {
 	centroidLat /= float64(count)
 	centroidLon /= float64(count)
 	println(centroidLat, centroidLon, minLat, maxLat, minLon, maxLon)
-	zoom := 2.0
+	zoom := 3.0
 	factorX := canvasX / (maxLat - minLat) * zoom
-	factorY := canvasY / (maxLat - minLat) * zoom
+	factorY := canvasY / (maxLon - minLon) * zoom
 
 	fmt.Println("Done preprocessing in " + time.Since(start).String())
 	println(factorX, factorY)
@@ -105,6 +107,8 @@ func main() {
 	dc.SetRGB(1, 1, 1)
 	dc.DrawRectangle(0, 0, canvasX, canvasY)
 	dc.Fill()
+
+	var buildings []*WayWithNodes = []*WayWithNodes{}
 
 	for _, w := range ways {
 		if len(w.Nodes) == 0 {
@@ -115,12 +119,45 @@ func main() {
 			if w.Way.Tags.Find("highway") != "" {
 				drawRoad(dc, w, centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
 			}
+			if w.Way.Tags.Find("leisure") != "" {
+
+				dc.SetLineWidth(1.0)
+				dc.Push()
+				dc.NewSubPath()
+				for i := 0; i < len(w.Nodes)-1; i++ {
+					x1, y1 := processLatLon(w.Nodes[i], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
+					if i == 0 {
+						dc.MoveTo(x1, y1)
+					} else {
+						dc.LineTo(x1, y1)
+					}
+				}
+				dc.ClosePath()
+				// 106, 153, 78
+				// 180, 219, 213
+				dc.SetRGB(205/255.0, 239.0/255.0, 212.0/255.0)
+				dc.Fill()
+				dc.Pop()
+			}
 			if w.Way.Tags.Find("building") != "" {
-				drawBuilding(dc, w, centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
+				buildings = append(buildings, w)
 			}
 		} else {
 			continue
 		}
+	}
+	fmt.Println("Sorting buildings in " + time.Since(start).String())
+	// sort buildings by latitude (this bubble sort, not very efficient)
+	for i := 0; i < len(buildings); i++ {
+		for j := i + 1; j < len(buildings); j++ {
+			if buildings[i].Nodes[0].Lat < buildings[j].Nodes[0].Lat {
+				buildings[i], buildings[j] = buildings[j], buildings[i]
+			}
+		}
+	}
+	fmt.Println("Drawing buildings in " + time.Since(start).String())
+	for _, w := range buildings {
+		drawBuilding(dc, w, centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
 	}
 
 	dc.Fill()
@@ -139,6 +176,15 @@ func processLatLon(node *osm.Node, centroidLat float64, centroidLon float64, fac
 	skew = 0.0
 	shrinkage := 0.8
 	y0 := (node.Lat-centroidLat)*-1.0*factorY*shrinkage + canvasY/2 + skew
+
+	// angle := math.Pi / 2.0
+	// // rotate x and y around the centroid
+	// tempX0 := x0
+	// tempY0 := y0
+	// x0 = (tempX0-canvasX/2)*math.Cos(angle) - (tempY0-canvasY/2)*math.Sin(angle) + canvasX/2
+	// y0 = (tempX0-canvasX/2)*math.Sin(angle) + (tempY0-canvasY/2)*math.Cos(angle) + canvasY/2
+	// y0 *= 0.5
+
 	return x0, y0
 }
 
@@ -199,14 +245,16 @@ func drawRoad(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroidLon 
 }
 
 func drawBuilding(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroidLon float64, factorX float64, factorY float64, canvasX float64, canvasY float64) {
-	dc.SetLineWidth(1.0)
-	for i := 0; i < len(w.Nodes)-1; i++ {
-		x1, y1 := processLatLon(w.Nodes[i], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
-		dc.LineTo(x1, y1)
-	}
-	dc.ClosePath()
-	dc.SetRGB(1, 0, 0)
-	dc.Stroke()
+	// Draw the base of the building
+
+	// dc.SetLineWidth(1.0)
+	// for i := 0; i < len(w.Nodes)-1; i++ {
+	// 	x1, y1 := processLatLon(w.Nodes[i], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
+	// 	dc.LineTo(x1, y1)
+	// }
+	// dc.ClosePath()
+	// dc.SetRGB(1, 0, 0)
+	// dc.Stroke()
 
 	// return
 	// // draw height (disabled because it doesnt look good)
@@ -219,24 +267,29 @@ func drawBuilding(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroid
 		level, err := strconv.Atoi(levels)
 		if err != nil {
 		} else {
-			height = float64(level) * 20
+			height = float64(level) * 20.0 // make floors not as big
 		}
 		dc.SetRGBA(0.5, 0.5, 0.8, 1)
 		dc.SetLineWidth(1.0)
 	} else {
-		return
+		// if it doesnt have the level info do?
+		// return
 	}
+	var pairXY [][2]float64 = [][2]float64{}
 	for i := 0; i < len(w.Nodes)-1; i++ {
 		x1, y1 := processLatLon(w.Nodes[i], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
+		pairXY = append(pairXY, [2]float64{x1, y1 - height})
+
+		dc.NewSubPath()
 		dc.MoveTo(x1, y1)
 		// for each node in the building lets draw a line that goes up
 		dc.LineTo(x1, y1-height)
 		x2, y2 := processLatLon(w.Nodes[i+1], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
-		dc.LineTo(x2, y2-height)
+		dc.SetRGBA(0.5, 0.5, 0.8, 1)
+		dc.SetLineWidth(0.5)
 		dc.Stroke()
+		pairXY = append(pairXY, [2]float64{x2, y2 - height})
 
-		// add a fill
-		// color := dc.
 		dc.Push()
 		dc.SetRGB(1, 0, 0)
 
@@ -245,9 +298,10 @@ func drawBuilding(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroid
 		// startX := min(x1, x2)
 		// endX := max(x1, x2)
 
-		linear := gg.NewLinearGradient(0, start-height, 0, end+height)
-		linear.AddColorStop(0, color.RGBA{255, 0, 0, 255})
-		linear.AddColorStop(1, color.RGBA{255, 255, 255, 255})
+		linear := gg.NewLinearGradient(0, start-height, 0, end)
+		// 119, 141, 169
+		linear.AddColorStop(0, color.RGBA{180, 194.0, 213.0, 255})
+		linear.AddColorStop(1, color.RGBA{220, 220, 220, 255})
 		dc.SetFillStyle(linear)
 		dc.NewSubPath()
 		dc.MoveTo(x1, y1)
@@ -258,6 +312,15 @@ func drawBuilding(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroid
 		// dc.DrawRectangle(x1, end-height, endX-startX, height)
 		dc.Fill()
 		dc.Pop()
-		// dc.
 	}
+
+	// draw the top of the building
+	dc.SetLineWidth(1.0)
+	dc.SetRGBA(0.5, 0.5, 0.8, 1)
+	dc.MoveTo(pairXY[0][0], pairXY[0][1])
+	for _, pair := range pairXY {
+		dc.LineTo(pair[0], pair[1])
+	}
+	dc.ClosePath()
+	dc.Fill()
 }
