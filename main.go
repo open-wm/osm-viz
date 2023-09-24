@@ -19,8 +19,6 @@ type WayWithNodes struct {
 	Nodes []*osm.Node
 }
 
-// TODO: do an isochrone?
-
 func main() {
 	start := time.Now()
 	file, err := os.Open("map-sani.osm")
@@ -64,7 +62,7 @@ func main() {
 	}
 	wg.Wait()
 
-	fmt.Println("Mapped all nodes " + time.Since(start).String())
+	fmt.Println(fmt.Sprintf("Mapped all nodes %v, nodes: %d", time.Since(start), len(nodeMap)))
 
 	ways := []*WayWithNodes{}
 
