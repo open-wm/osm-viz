@@ -34,8 +34,8 @@ func main() {
 
 	// Print the number of nodes
 
-	canvasX := 10000.0
-	canvasY := 5000.0
+	canvasX := 10 * 1000.0 // 10MP
+	canvasY := 5 * 1000.0  // 5MP
 	dc := gg.NewContext(int(canvasX), int(canvasY))
 
 	centroidLat := 0.0
@@ -102,7 +102,8 @@ func main() {
 	fmt.Println("Done preprocessing in " + time.Since(start).String())
 	println(factorX, factorY)
 
-	dc.SetRGB(1, 1, 1)
+	dc.SetRGB(254/255.0, 255.0/255.0, 229.0/255.0)
+	dc.SetRGB(0.9, 0.9, 0.8)
 	dc.DrawRectangle(0, 0, canvasX, canvasY)
 	dc.Fill()
 
@@ -116,6 +117,9 @@ func main() {
 		if w.Way.Tags.AnyInteresting() {
 			if w.Way.Tags.Find("highway") != "" {
 				drawRoad(dc, w, centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
+				// for _, t := range w.Way.Tags {
+				// 	println(t.Key, t.Value)
+				// }
 			}
 			if w.Way.Tags.Find("leisure") != "" {
 
@@ -187,9 +191,6 @@ func processLatLon(node *osm.Node, centroidLat float64, centroidLon float64, fac
 }
 
 func drawRoad(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroidLon float64, factorX float64, factorY float64, canvasX float64, canvasY float64) {
-	// for _, t := range w.Way.Tags {
-	// 	println(t.Key, t.Value)
-	// }
 	lineWidth := 5.0
 	lanes := w.Way.Tags.Find("lanes")
 	if lanes != "" {
@@ -201,13 +202,13 @@ func drawRoad(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroidLon 
 	}
 	dc.SetLineWidth(lineWidth)
 	colors := map[string][3]float64{
-		"motorway":          {251 / 255.0, 133.0 / 255.0, 0.0 / 255.0}, // Javier prado y evitamiento // orange
-		"trunk":             {2 / 255.0, 48.0 / 255.0, 71.0 / 255.0},   // IDK we dont seem to have any
-		"primary":           {251 / 255.0, 183.0 / 255.0, 0.0 / 255.0}, // Panamericana // yellow
-		"secondary":         {2 / 255.0, 48.0 / 255.0, 71.0 / 255.0},   // la floresta, olguin // blue
+		"motorway":          {251 / 255.0, 133.0 / 255.0, 0.0 / 255.0},   // Javier prado y evitamiento // orange
+		"trunk":             {2 / 255.0, 48.0 / 255.0, 71.0 / 255.0},     // IDK we dont seem to have any
+		"primary":           {251 / 255.0, 183.0 / 255.0, 0.0 / 255.0},   // Panamericana // yellow
+		"secondary":         {102 / 255.0, 148.0 / 255.0, 171.0 / 255.0}, // la floresta, olguin // blue
 		"tertiary":          {33 / 255.0, 157 / 255.0, 188 / 255.0},
 		"unclassified":      {0.6, 0.6, 0.6},
-		"residential":       {0.6, 0.6, 0.6},
+		"residential":       {1.0, 1.0, 1.0},
 		"service":           {0.6, 0.6, 0.6},
 		"motorway_link":     {251 / 255.0, 183.0 / 255.0, 0.0 / 255.0}, // yellow
 		"trunk_link":        {0.6, 0.6, 0.6},
@@ -219,19 +220,61 @@ func drawRoad(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroidLon 
 		"service_link":      {0.6, 0.6, 0.6},
 	}
 	x0, y0 := processLatLon(w.Nodes[0], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
+
+	roadType := w.Way.Tags.Find("highway")
+	// set colors according to their type
+	if roadType == "" {
+		return
+	}
+
+	if roadType == "residential" {
+		dc.Push()
+		dc.SetRGBA(0.6, 0.6, 0.6, 0.3)
+		ratio := 0.8
+		dc.MoveTo(x0-lineWidth*ratio, y0-lineWidth*ratio)
+		for i := 1; i < len(w.Nodes); i++ {
+			x1, y1 := processLatLon(w.Nodes[i], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
+			dc.LineTo(x1-lineWidth*ratio, y1-lineWidth*ratio)
+		}
+		dc.Stroke()
+		dc.MoveTo(x0+lineWidth*ratio, y0+lineWidth*ratio)
+		// vector to store the direction
+		vector := [2]float64{}
+		for i := 1; i < len(w.Nodes); i++ {
+			x1, y1 := processLatLon(w.Nodes[i], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
+			dc.LineTo(x1+lineWidth*ratio, y1+lineWidth*ratio)
+
+			if i == 1 {
+				// vector to store the direction of the road
+				vector = [2]float64{x1, y1}
+			}
+		}
+		dc.Stroke()
+		// draw a random rectangle to simulate a car
+		if false {
+			dc.MoveTo(x0, y0)
+			x1 := x0 + (vector[0]-x0)*0.2
+			y1 := y0 + (vector[1]-y0)*0.2
+			dc.LineTo(x1, y1)
+			dc.LineTo(x1, y1-10)
+			dc.LineTo(x0, y0-10)
+			dc.ClosePath()
+			dc.SetRGBA(1, 0.6, 0.6, 1)
+			dc.Fill()
+			// end of drawing a car
+			dc.Pop()
+		}
+	}
+
+	x0, y0 = processLatLon(w.Nodes[0], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
+
 	dc.MoveTo(x0, y0)
 	for i := 1; i < len(w.Nodes); i++ {
 		x1, y1 := processLatLon(w.Nodes[i], centroidLat, centroidLon, factorX, factorY, canvasX, canvasY)
 		// if y1 < canvasY/3 || y1 > canvasY*2/3 {
 		// 	continue
 		// }
-		dc.LineTo(x1, y1)
-	}
-
-	// set colors according to their type
-	roadType := w.Way.Tags.Find("highway")
-	if roadType == "" {
-		return
+		dc.LineTo(x1-2, y1-2)
 	}
 	c := colors[roadType]
 	if c[0] == 0.0 && c[1] == 0.0 && c[2] == 0.0 {
@@ -240,6 +283,7 @@ func drawRoad(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroidLon 
 		dc.SetColor(color.NRGBA{uint8(c[0] * 255), uint8(c[1] * 255), uint8(c[2] * 255), 200})
 	}
 	dc.Stroke()
+
 }
 
 func drawBuilding(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroidLon float64, factorX float64, factorY float64, canvasX float64, canvasY float64) {
@@ -315,6 +359,8 @@ func drawBuilding(dc *gg.Context, w *WayWithNodes, centroidLat float64, centroid
 	// draw the top of the building
 	dc.SetLineWidth(1.0)
 	dc.SetRGBA(0.5, 0.5, 0.8, 1)
+	dc.SetRGBA(0.75, 0.75, 1, 1)
+	dc.SetRGBA(0.90, 0.90, 0.90, 1)
 	dc.MoveTo(pairXY[0][0], pairXY[0][1])
 	for _, pair := range pairXY {
 		dc.LineTo(pair[0], pair[1])
