@@ -19,3 +19,14 @@ To run:
 ```bash
 go run -v ./main.go
 ```
+
+To get data use planet OSM or
+For example: 
+http://download.geofabrik.de/south-america/peru.html
+
+Some nice colors:
+https://carto.com/carto-colors/
+or D3 colorscheme
+
+Polygon
+https://en.wikipedia.org/wiki/Point_in_polygon
